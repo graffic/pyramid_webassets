@@ -26,6 +26,19 @@ class PyramidResolver(Resolver):
         else:
             return (None, item)
 
+    def _convert_path_to_asset_spec(self, filepath, item):
+        """
+        Converts a filepath to asset specification if item is an asset spec.
+        """
+        if ':' not in item:
+            return filepath
+
+        package, file_part = item.split(':', 1)
+        package = '%s:' % package
+        base_path = self.resolver.resolve(package).abspath()
+        base_path = path.join(base_path, '')
+        return filepath.replace(base_path, package)
+
     def search_for_source(self, item):
         package, filepath = self._split_asset_spec(item)
         if package is None:
@@ -37,8 +50,9 @@ class PyramidResolver(Resolver):
         request = get_current_request()
 
         if request is not None:
+            fp = self._convert_path_to_asset_spec(filepath, item)
             try:
-                return request.static_url(filepath)
+                return request.static_url(fp)
             except ValueError:
                 pass
         return super(PyramidResolver, self).resolve_source_to_url(
@@ -58,12 +72,14 @@ class PyramidResolver(Resolver):
     def resolve_output_to_url(self, item):
         request = get_current_request()
 
-        package, filepath = self._split_asset_spec(item)
-        if package is not None:
-            item = path.join(package, filepath)
+        base_path, filepath = self._split_asset_spec(item)
+        if base_path is not None:
+            join_part = base_path
+        elif ':' in self.env.url:
+            join_part = self.env.url
         else:
-            if not path.isabs(filepath):
-                item = path.join(self.env.directory, filepath)
+            join_part = self.env.directory
+        item = path.join(join_part, filepath)
 
         if request is not None:
             try:
@@ -72,10 +88,13 @@ class PyramidResolver(Resolver):
             except ValueError:
                 pass
 
-        return super(PyramidResolver, self).resolve_output_to_url(item)
+        return super(PyramidResolver, self).resolve_output_to_url(
+            item)
+
 
 class Environment(Environment):
     resolver_class = PyramidResolver
+
 
 class IWebAssetsEnvironment(Interface):
     pass
